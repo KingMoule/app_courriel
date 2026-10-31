@@ -59,6 +59,7 @@ Chaque ligne : expéditeur ou destinataire, objet, âge ; pour le compte `travai
 **Fini quand** : sur des conversations synthétiques, le rappel liste exactement les `important` sans réponse et les envois sans réponse depuis 3 jours, et ignore ceux qui ont reçu une réponse.
 
 ## Commandes ponctuelles
+- `python -m app_courriel connecter <compte>` : connexion OAuth initiale d'un compte (`travail`, `perso_recent` ou `perso_ancien`) ; le jeton est rangé dans `secrets/`.
 - `python -m app_courriel desabonner` : liste, numérotés, les expéditeurs d'infolettres des 90 derniers jours (en-tête `List-Unsubscribe`) ; je tape les numéros choisis. Le script se désabonne seulement là où le désabonnement en un clic existe (en-tête `List-Unsubscribe-Post`, RFC 8058) ; dans tous les cas, il bloque l'expéditeur.
 - `python -m app_courriel menage` : liste, numérotés, les 50 expéditeurs qui ont le plus de courriels dans Hotmail ; je tape les numéros choisis, le script déplace leurs courriels dans un dossier `Menage` (jamais supprimés).
 
