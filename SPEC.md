@@ -9,7 +9,7 @@ Un script local qui surveille les 3 comptes et :
 Plus deux commandes à lancer une fois : désabonnement en masse et grand ménage.
 
 ## Pourquoi bâtir plutôt qu'utiliser une app
-Aucune app étudiée ne réunit tri par IA, alertes jugées par l'IA, rappel du matin et relances pour moins de 5 $ par mois ([comparaison](https://claude.ai/artifact/PJ5AsvwXDF1P7jU1BzK29Z)). Spark gratuit ne trie pas par IA et n'a pas de rappel du matin ; SaneBox coûte 319 $ US par an pour 3 comptes.
+Aucune app étudiée ne réunit tri par IA, alertes jugées par l'IA, rappel du matin et relances pour moins de 5 $ par mois. Spark gratuit ne trie pas par IA et n'a pas de rappel du matin ; SaneBox coûte 319 $ US par an pour 3 comptes.
 
 ## Comptes
 | Nom | Fournisseur | Accès |
@@ -18,27 +18,31 @@ Aucune app étudiée ne réunit tri par IA, alertes jugées par l'IA, rappel du 
 | `perso_recent` | Gmail | Gmail API |
 | `perso_ancien` | Hotmail (compte Microsoft personnel, le plus de pourriels) | Microsoft Graph |
 
-Connexion OAuth une fois par compte ; les jetons vivent dans `secrets/` (jamais dans le dépôt). Aucune adresse réelle dans le code : on désigne les comptes par leur nom ci-dessus.
+Connexion OAuth une fois par compte ; les jetons vivent dans `secrets/` (jamais dans le dépôt). L'app OAuth Google est mise « In production » (non vérifiée, usage personnel) : en mode « Testing », le jeton expire aux 7 jours. Sur Gmail, « déplacer dans un dossier » veut dire ajouter le libellé et retirer `INBOX`. Aucune adresse réelle dans le code : on désigne les comptes par leur nom ci-dessus.
 
 ## Forme
 Script Python en ligne de commande, `python -m app_courriel`, lancé **toutes les 10 minutes** par le planificateur de tâches de l'ordinateur, qui reste allumé (écran en veille : OK ; mise en veille de l'ordinateur : non, sinon le planificateur s'arrête). Pas d'interface.
 
 Alertes et rappels passent par [ntfy](https://ntfy.sh) : une app gratuite sur iPhone, sans compte, qui reçoit un message par simple requête HTTP sur un sujet secret (gardé dans `.env`). Les notifications de l'app de courriel sur le cellulaire sont coupées : seules les alertes ntfy sonnent.
 
-**Budget : moins de 5 $ par mois.** Volume : plus de 100 courriels par jour. On utilise le plus petit modèle Claude, et les règles passent avant l'IA (voir Classement).
+**Budget : moins de 5 $ par mois.** Volume : plus de 100 courriels par jour. Modèle : `claude-haiku-5-5` (le plus petit), au plus 50 appels par passage ; le surplus attend le passage suivant. Les règles passent avant l'IA (voir Classement).
+
+**État** : un fichier SQLite local, `data/etat.db` (ignoré par git), garde le dernier passage, les expéditeurs bloqués, les alertes envoyées et les courriels en attente de réponse.
+
+**Heure** : fuseau `America/Toronto`.
 
 ## Classement (une passe par nouveau courriel)
 - Lit les courriels de la boîte de réception reçus depuis le dernier passage.
 - Règles d'abord, sans appel à Claude :
-  - expéditeur bloqué (déjà déplacé dans `Pourriels-Claude`, par moi ou par le script) : `pourriel` directement ;
-  - expéditeur dans les contacts ou à qui j'ai déjà écrit : jamais `pourriel`.
-- Claude classe chaque courriel restant : `pourriel`, `important` ou `normal`, avec un résumé d'une ligne. Seuls l'expéditeur, l'objet et les 500 premiers caractères sont envoyés.
+  - expéditeur bloqué (déjà déplacé dans `Pourriels-Claude`, par moi ou par le script) : `pourriel` directement ; ce blocage l'emporte sur la règle suivante ;
+  - expéditeur à qui j'ai déjà écrit (liste tirée des envoyés des 12 derniers mois, rafraîchie une fois par jour) : jamais `pourriel`.
+- Claude classe chaque courriel restant : `pourriel`, `important` ou `normal`, avec un résumé d'une ligne. Seuls l'expéditeur, l'objet et les 500 premiers caractères sont envoyés. Claude répond en JSON strict (`{"classe": ..., "resume": ...}`) ; toute réponse invalide vaut `normal`, ce qui neutralise un courriel qui tenterait de donner des ordres à Claude. Si l'API ne répond pas, le courriel reste non classé et est repris au passage suivant.
 - `important` = une personne (pas une infolettre ni un `no-reply`) m'écrit directement et attend une réponse ou une action de ma part.
 
 ## Fonction 1 — Tri des pourriels
 Un `pourriel` est **déplacé** dans un dossier `Pourriels-Claude`, jamais supprimé, et son expéditeur est bloqué pour les prochains passages. Les pourriels visés : la pub non désirée comme les arnaques.
 
-**Fini quand** : sur 20 courriels synthétiques (10 pourriels, 10 légitimes), au moins 18 sont bien classés et aucun courriel d'un contact n'est déplacé.
+**Fini quand** : sur 20 courriels synthétiques fixés dans le dépôt (test réel contre l'API, lancé à la main) (10 pourriels, 10 légitimes), au moins 18 sont bien classés et aucun courriel d'un contact n'est déplacé.
 
 ## Fonction 2 — Alerte sur le cellulaire
 Un courriel `important` déclenche une alerte ntfy : compte, expéditeur, objet, résumé d'une ligne. Une seule alerte par courriel. Pas d'alerte entre 22 h et 7 h (elles attendent le matin).
@@ -46,9 +50,9 @@ Un courriel `important` déclenche une alerte ntfy : compte, expéditeur, objet,
 **Fini quand** : un courriel synthétique `important` produit exactement une alerte avec son résumé, un `normal` aucune.
 
 ## Fonction 3 — Rappel du matin
-À 7 h, une notification ntfy liste :
+Le premier passage après 7 h envoie une notification ntfy, une seule fois par jour, qui liste :
 - **À répondre** : les courriels `important` reçus auxquels je n'ai pas répondu (aucun message de moi n'a suivi dans la conversation), **qu'ils soient lus ou non** ;
-- **À relancer** : mes courriels envoyés à une personne, sans réponse depuis 3 jours.
+- **À relancer** : mes courriels envoyés à un seul destinataire en « À » (pas un `no-reply` ni une liste de diffusion), sans réponse de quiconque dans la conversation depuis 3 jours.
 
 Chaque ligne : expéditeur ou destinataire, objet, âge. Si la liste dépasse 10 lignes, on montre les 10 plus vieilles et le total. Un courriel sort de la liste quand la conversation reçoit une réponse, ou après 14 jours.
 
@@ -56,7 +60,7 @@ Chaque ligne : expéditeur ou destinataire, objet, âge. Si la liste dépasse 10
 
 ## Commandes ponctuelles
 - `python -m app_courriel desabonner` : liste les expéditeurs d'infolettres des 90 derniers jours (en-tête `List-Unsubscribe`), je coche, le script se désabonne et bloque l'expéditeur.
-- `python -m app_courriel menage` : liste les expéditeurs qui occupent le plus de place dans Hotmail ; je choisis, le script déplace leurs courriels dans un dossier `Menage` (jamais supprimés).
+- `python -m app_courriel menage` : liste les 50 expéditeurs qui ont le plus de courriels dans Hotmail ; je choisis, le script déplace leurs courriels dans un dossier `Menage` (jamais supprimés).
 
 **Fini quand** : sur des données synthétiques, chaque commande ne touche que les expéditeurs cochés.
 
