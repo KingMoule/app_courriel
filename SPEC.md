@@ -1,0 +1,78 @@
+# SPEC — app_courriel v1
+
+## But
+Un script local qui surveille les 3 comptes et :
+1. déplace les pourriels que les filtres ont ratés ;
+2. envoie une alerte sur le iPhone, avec un résumé d'une ligne, quand un courriel important arrive ;
+3. envoie chaque matin la liste des courriels qui attendent une réponse, de moi ou des autres.
+
+Plus deux commandes à lancer une fois : désabonnement en masse et grand ménage.
+
+## Pourquoi bâtir plutôt qu'utiliser une app
+Aucune app étudiée ne réunit tri par IA, alertes jugées par l'IA, rappel du matin et relances pour moins de 5 $ par mois. Spark gratuit ne trie pas par IA et n'a pas de rappel du matin ; SaneBox coûte 319 $ US par an pour 3 comptes.
+
+## Comptes
+| Nom | Fournisseur | Accès |
+|---|---|---|
+| `travail` | Microsoft 365 (compte d'organisation) | Microsoft Graph |
+| `perso_recent` | Gmail | Gmail API |
+| `perso_ancien` | Hotmail (compte Microsoft personnel, le plus de pourriels) | Microsoft Graph |
+
+Connexion OAuth une fois par compte ; les jetons vivent dans `secrets/` (jamais dans le dépôt). L'app OAuth Google est mise « In production » (non vérifiée, usage personnel) : en mode « Testing », le jeton expire aux 7 jours. Sur Gmail, « déplacer dans un dossier » veut dire ajouter le libellé et retirer `INBOX`. Aucune adresse réelle dans le code : on désigne les comptes par leur nom ci-dessus.
+
+## Forme
+Script Python en ligne de commande, `python -m app_courriel`, lancé **toutes les 10 minutes** par le Planificateur de tâches Windows, sur un ordinateur de bureau qui reste allumé (écran en veille : OK ; mise en veille de l'ordinateur : non). Réglages de la tâche : « Exécuter même si l'utilisateur n'est pas connecté » et « Ne pas démarrer de nouvelle instance » (jamais deux passages en même temps). Pas d'interface.
+
+Alertes et rappels passent par [ntfy](https://ntfy.sh) : une app gratuite sur iPhone, sans compte, qui reçoit un message par simple requête HTTP sur un sujet secret (gardé dans `.env`). Les notifications de l'app de courriel sur le cellulaire sont coupées : seules les alertes ntfy sonnent.
+
+**Budget : moins de 5 $ par mois.** Volume : plus de 100 courriels par jour. Modèle : `claude-haiku-5-5` (le plus petit), au plus 50 appels par passage ; le surplus attend le passage suivant. Les règles passent avant l'IA (voir Classement).
+
+**État** : un fichier SQLite local, `data/etat.db` (ignoré par git), garde le dernier passage, les expéditeurs bloqués, les alertes envoyées et les courriels en attente de réponse.
+
+**Heure** : fuseau `America/Toronto`.
+
+## Classement (une passe par nouveau courriel)
+- Lit les courriels de la boîte de réception reçus depuis le dernier passage.
+- Règles d'abord, sans appel à Claude :
+  - expéditeur bloqué (déjà déplacé dans `Pourriels-Claude`, par moi ou par le script) : `pourriel` directement. Le blocage porte sur l'adresse exacte et vaut pour les 3 comptes ; il l'emporte sur la règle suivante ;
+  - expéditeur à qui j'ai déjà écrit (liste tirée des envoyés des 12 derniers mois, rafraîchie une fois par jour) : jamais `pourriel`.
+- Claude classe chaque courriel restant : `pourriel`, `important` ou `normal`, avec un résumé d'une ligne. Seuls l'expéditeur, l'objet et les 500 premiers caractères sont envoyés. Claude répond en JSON strict (`{"classe": ..., "resume": ...}`) ; toute réponse invalide vaut `normal`, ce qui neutralise un courriel qui tenterait de donner des ordres à Claude. Si l'API ne répond pas, le courriel reste non classé et est repris au passage suivant.
+- `important` = une personne (pas une infolettre ni un `no-reply`) m'écrit directement et attend une réponse ou une action de ma part.
+
+## Fonction 1 — Tri des pourriels
+Un `pourriel` est **déplacé** dans un dossier `Pourriels-Claude`, jamais supprimé, et son expéditeur est bloqué pour les prochains passages. Les pourriels visés : la pub non désirée comme les arnaques.
+
+**Fini quand** : sur 20 courriels synthétiques fixés dans le dépôt (10 pourriels, 10 légitimes), au moins 18 sont bien classés et aucun courriel d'un expéditeur à qui j'ai déjà écrit n'est déplacé. Ce test appelle la vraie API ; il se lance à la main.
+
+## Fonction 2 — Alerte sur le cellulaire
+Un courriel `important` déclenche une alerte ntfy : compte, expéditeur, objet, résumé d'une ligne. Pour le compte `travail`, l'alerte dit seulement « Courriel important (travail) » : rien de confidentiel ne passe par ntfy.sh. Une seule alerte par courriel. Entre 22 h et 7 h, aucune alerte : ces courriels apparaissent dans le rappel du matin.
+
+**Fini quand** : un courriel synthétique `important` produit exactement une alerte avec son résumé, un `normal` aucune.
+
+## Fonction 3 — Rappel du matin
+Le premier passage après 7 h envoie une notification ntfy, une seule fois par jour, qui liste :
+- **À répondre** : les courriels `important` reçus auxquels je n'ai pas répondu (aucun message de moi n'a suivi dans la conversation), **qu'ils soient lus ou non** ;
+- **À relancer** : mes courriels envoyés à un seul destinataire en « À » (pas un `no-reply` ni une liste de diffusion), sans réponse de quiconque dans la conversation depuis 3 jours.
+
+Chaque ligne : expéditeur ou destinataire, objet, âge ; pour le compte `travail`, seulement « travail » et l'âge. Si la liste dépasse 10 lignes, on montre les 10 plus vieilles et le total. Un courriel sort de la liste quand la conversation reçoit une réponse, ou après 14 jours.
+
+**Fini quand** : sur des conversations synthétiques, le rappel liste exactement les `important` sans réponse et les envois sans réponse depuis 3 jours, et ignore ceux qui ont reçu une réponse.
+
+## Commandes ponctuelles
+- `python -m app_courriel desabonner` : liste, numérotés, les expéditeurs d'infolettres des 90 derniers jours (en-tête `List-Unsubscribe`) ; je tape les numéros choisis. Le script se désabonne seulement là où le désabonnement en un clic existe (en-tête `List-Unsubscribe-Post`, RFC 8058) ; dans tous les cas, il bloque l'expéditeur.
+- `python -m app_courriel menage` : liste, numérotés, les 50 expéditeurs qui ont le plus de courriels dans Hotmail ; je tape les numéros choisis, le script déplace leurs courriels dans un dossier `Menage` (jamais supprimés).
+
+**Fini quand** : sur des données synthétiques, chaque commande ne touche que les expéditeurs choisis.
+
+## Cas limites
+- Un compte inaccessible (jeton expiré, accès refusé) : une alerte le signale une fois par jour ; les autres comptes continuent.
+- Le compte `travail` peut exiger l'approbation de l'administrateur pour Graph : si c'est refusé, la v1 se limite aux deux comptes personnels.
+- Premier lancement : le script remonte 30 jours, sans alerte, pour remplir le rappel du matin. Avec la limite de 50 appels par passage, ce rattrapage s'étale sur quelques heures.
+- Ordinateur éteint : rien ne tourne ; au redémarrage, le script traite ce qui est arrivé entre-temps (30 jours au plus), sans alerte.
+- Un courriel légitime déplacé par erreur : le remettre dans la boîte de réception débloque son expéditeur. Le script ne surveille que les courriels qu'il a lui-même déplacés (il garde leurs identifiants).
+
+## Hors de la v1
+Interface web ou de bureau, réponses rédigées par Claude, suppression automatique, courriels transformés en tâches.
+
+## Hypothèse
+L'employeur permet l'accès au compte `travail` par une app tierce et l'envoi d'extraits de courriels à Claude. À confirmer avant de brancher ce compte.
