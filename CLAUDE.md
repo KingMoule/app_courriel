@@ -6,7 +6,9 @@ Langue : on échange en français ; le code et ses identifiants sont en anglais.
 
 ## Commandes
 <!-- À remplir dès que la pile est choisie : installer, lancer, tester un seul fichier, lint. -->
-- (aucune pour l'instant)
+- Installer : `pip install -r requirements-dev.txt`
+- Tests : `python3 -m pytest -q` (aussi lancé par le hook `Stop`)
+- Lancer un passage : `python3 -m app_courriel`
 
 ## Règles
 - Avant de coder une fonctionnalité, s'appuyer sur `SPEC.md` ; si elle n'y est pas, la proposer d'abord.
