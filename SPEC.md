@@ -16,7 +16,7 @@ Un script local qui surveille les 3 comptes et :
 Connexion OAuth une fois par compte ; les jetons vivent dans `secrets/` (jamais dans le dépôt). Aucune adresse réelle dans le code : on désigne les comptes par leur nom ci-dessus.
 
 ## Forme
-Script Python en ligne de commande, `python -m app_courriel`, lancé **toutes les 10 minutes** par le planificateur de tâches de l'ordinateur. Pas d'interface.
+Script Python en ligne de commande, `python -m app_courriel`, lancé **toutes les 10 minutes** par le planificateur de tâches de l'ordinateur, qui reste allumé (écran en veille : OK ; mise en veille de l'ordinateur : non, sinon le planificateur s'arrête). Pas d'interface.
 
 Alertes et rappels passent par [ntfy](https://ntfy.sh) : une app gratuite sur le cellulaire, sans compte, qui reçoit un message par simple requête HTTP sur un sujet secret (gardé dans `.env`).
 
@@ -50,5 +50,4 @@ Un courriel `important` déclenche une alerte ntfy : compte, expéditeur, objet.
 Interface web ou de bureau, réponses rédigées par Claude, suppression automatique.
 
 ## Questions ouvertes
-- L'ordinateur reste-t-il allumé ? Sinon, les alertes n'arrivent pas : il faudrait un petit serveur toujours allumé (étape suivante, pas la v1).
 - Le compte de travail autorise-t-il les apps tierces ?
