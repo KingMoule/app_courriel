@@ -49,5 +49,5 @@ Un courriel `important` déclenche une alerte ntfy : compte, expéditeur, objet.
 ## Hors de la v1
 Interface web ou de bureau, réponses rédigées par Claude, suppression automatique.
 
-## Ordre de construction
-Les deux comptes personnels d'abord. Le compte `travail` en dernier, après avoir vérifié auprès de l'employeur que l'accès par une app tierce et l'envoi d'extraits de courriels à Claude sont permis.
+## Hypothèse
+L'employeur permet l'accès au compte `travail` par une app tierce et l'envoi d'extraits de courriels à Claude. À confirmer avant de brancher ce compte.
