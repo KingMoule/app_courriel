@@ -8,6 +8,7 @@ Langue : on échange en français ; le code et ses identifiants sont en anglais.
 <!-- À remplir dès que la pile est choisie : installer, lancer, tester un seul fichier, lint. -->
 - Installer : `pip install -r requirements-dev.txt`
 - Tests : `python3 -m pytest -q` (aussi lancé par le hook `Stop`)
+- Test réel de la fonction 1 (appelle l'API, à la main) : `python3 -m pytest -m live -s` avec `ANTHROPIC_API_KEY` défini
 - Lancer un passage : `python3 -m app_courriel`
 
 ## Règles
