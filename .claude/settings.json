@@ -5,5 +5,17 @@
       "Read(./.env.*)",
       "Read(./secrets/**)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -m pytest -q >&2 || exit 2"
+          }
+        ]
+      }
+    ]
   }
 }
