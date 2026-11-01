@@ -1,6 +1,6 @@
 import sys
 
-from app_courriel import db
+from app_courriel import run
 
 COMMANDS = ("desabonner", "menage", "connecter")
 
@@ -8,8 +8,7 @@ COMMANDS = ("desabonner", "menage", "connecter")
 def main(argv):
     command = argv[0] if argv else "passage"
     if command == "passage":
-        db.open_db().close()  # le passage complet arrive avec run.py
-        return 0
+        return run.main()
     if command in COMMANDS:
         print(f"Commande « {command} » pas encore implémentée.", file=sys.stderr)
         return 1
