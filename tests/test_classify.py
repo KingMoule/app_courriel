@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from app_courriel import classify as c
+from app_courriel.run import load_env
 from tests.fakes import FakeClaude
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "classification.json").read_text(encoding="utf-8"))
@@ -91,6 +92,7 @@ def test_fixture_has_10_spam_10_legit():
 @pytest.mark.live
 def test_function1_real_api():
     """Fonction 1 : au moins 18/20 bien classés, aucun contact connu déplacé."""
+    load_env()  # la clé vit dans .env
     if not os.environ.get("ANTHROPIC_API_KEY"):
         pytest.skip("ANTHROPIC_API_KEY absent")
     known = set(FIXTURE["known_contacts"])
