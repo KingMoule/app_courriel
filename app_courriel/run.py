@@ -257,11 +257,12 @@ def load_env(path=".env"):
 
 
 def make_clients(secrets="secrets"):
-    """Les comptes connectés (jeton présent dans secrets/). Graph arrive à l'étape 6."""
-    from app_courriel import gmail
+    """Les comptes connectés (jeton présent dans secrets/)."""
+    from app_courriel import gmail, graph
 
-    token = Path(secrets) / "perso_recent.json"
-    return {"perso_recent": gmail.Gmail(token)} if token.exists() else {}
+    kinds = {"travail": graph.Graph, "perso_recent": gmail.Gmail, "perso_ancien": graph.Graph}
+    return {name: kind(Path(secrets) / f"{name}.json") for name, kind in kinds.items()
+            if (Path(secrets) / f"{name}.json").exists()}
 
 
 def main():
