@@ -1,8 +1,10 @@
 """Un passage complet (ARCHITECTURE.md, « Un passage ») : lire, bloquer, classer, déplacer, alerter."""
 
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
+from email.utils import parseaddr
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -12,6 +14,10 @@ TZ = ZoneInfo("America/Toronto")
 MAX_CALLS = 50  # appels à Claude par passage ; le surplus attend le passage suivant
 LOOKBACK = timedelta(days=30)
 ALERT_WINDOW = timedelta(hours=1)
+REMINDER_MAX_LINES = 10  # par section ; on montre les plus vieux
+FOLLOW_UP_AFTER = timedelta(days=3)
+REMINDER_EXPIRES = timedelta(days=14)
+CONTACT_WINDOW = timedelta(days=365)
 OVERLAP = timedelta(minutes=10)  # un courriel livré en retard n'est pas raté ; les doublons sont ignorés
 
 
@@ -131,6 +137,93 @@ def classify_pending(conn, clients, first_run, now, ask, send):
     return failed
 
 
+def is_no_reply(address):
+    local = re.sub(r"[-_.]", "", address.split("@")[0])
+    return local.startswith(("noreply", "donotreply"))
+
+
+def age_text(delta):
+    return f"{delta.days} j" if delta.days >= 1 else f"{delta.seconds // 3600} h"
+
+
+def build_reminder(items, now):
+    """Fonction pure (SPEC.md, fonction 3). `items` : {kind: "reply" | "follow_up", account, who, subject, date}.
+    Rend le texte du rappel, ou None s'il n'y a rien à rappeler."""
+    sections = []
+    for kind, title in (("reply", "À répondre"), ("follow_up", "À relancer")):
+        mine = sorted((i for i in items if i["kind"] == kind), key=lambda i: i["date"])
+        if not mine:
+            continue
+        head = f"{title} ({len(mine)})" if len(mine) <= REMINDER_MAX_LINES else \
+            f"{title} ({len(mine)}, les {REMINDER_MAX_LINES} plus vieux)"
+        lines = []
+        for i in mine[:REMINDER_MAX_LINES]:
+            age = age_text(now - i["date"])
+            if i["account"] == "travail":  # rien de confidentiel sur ntfy.sh
+                lines.append(f"• travail ({age})")
+            else:
+                lines.append(f"• {'→ ' if kind == 'follow_up' else ''}{i['who']} — {i['subject']} ({age})")
+        sections.append("\n".join([head] + lines))
+    return "\n\n".join(sections) or None
+
+
+def account_items(conn, name, client, sent, now):
+    """Les courriels d'un compte à rappeler, après relecture des conversations par l'API."""
+    threads = {}
+
+    def later(thread_id):
+        if thread_id not in threads:
+            threads[thread_id] = [(m["from_me"], datetime.fromisoformat(m["date"])) for m in client.get_thread(thread_id)]
+        return threads[thread_id]
+
+    items = []
+    rows = conn.execute(
+        "SELECT sender, subject, received_at, thread_id FROM messages"
+        " WHERE account = ? AND class = 'important' AND received_at > ?",
+        (name, utc_iso(now - REMINDER_EXPIRES)))
+    for sender, subject, received_at, thread_id in rows.fetchall():
+        received = datetime.fromisoformat(received_at)
+        if not any(mine and date > received for mine, date in later(thread_id)):  # je n'ai pas répondu
+            items.append({"kind": "reply", "account": name, "date": received, "subject": subject,
+                          "who": parseaddr(sender)[0] or classify.address(sender)})
+    for m in sent:
+        when, to = datetime.fromisoformat(m["sent_at"]), m["to"]
+        if not (now - REMINDER_EXPIRES < when <= now - FOLLOW_UP_AFTER) or len(to) != 1 or is_no_reply(to[0]):
+            continue
+        if not any(date > when for _, date in later(m["thread_id"])):  # personne n'a écrit depuis
+            items.append({"kind": "follow_up", "account": name, "date": when, "subject": m["subject"], "who": to[0]})
+    return items
+
+
+def remind(conn, now, clients, send):
+    """Étape 5 : le premier passage après 7 h, une fois par jour. Un compte en panne n'empêche pas les autres."""
+    today = now.date().isoformat()
+    if now.hour < notify.QUIET_END or db.get_state(conn, "last_reminder") == today:
+        return
+    items, contacts, all_ok = [], set(), True
+    for name, client in clients.items():
+        try:
+            sent = client.list_sent(now - CONTACT_WINDOW)
+            items += account_items(conn, name, client, sent, now)
+        except Exception as e:
+            all_ok = False
+            report_error(conn, name, e, now, send)
+            continue
+        contacts |= {classify.address(a) for m in sent for a in m["to"]}
+    with conn:  # known_contacts se reconstruit ; on ne retire rien si un compte n'a pas répondu
+        if all_ok:
+            conn.execute("DELETE FROM known_contacts")
+        conn.executemany("INSERT OR IGNORE INTO known_contacts VALUES (?)", [(a,) for a in contacts])
+    text = build_reminder(items, now)
+    if text:
+        try:
+            send("Rappel du matin", text)
+        except Exception as e:
+            print(f"ntfy : {type(e).__name__}", file=sys.stderr)
+            return  # repris au prochain passage
+    db.set_state(conn, "last_reminder", today)
+
+
 def run_pass(conn, now, clients, ask, send):
     """Un passage. `clients` : {nom du compte: client}, `send(titre, message)` pousse sur ntfy."""
     first_run = {name: db.get_state(conn, f"last_pass:{name}") is None for name in clients}
@@ -143,6 +236,7 @@ def run_pass(conn, now, clients, ask, send):
             report_error(conn, name, e, now, send)
 
     failed = classify_pending(conn, ok, first_run, now, ask, send)
+    remind(conn, now, ok, send)
 
     for name in ok:
         if name not in failed:

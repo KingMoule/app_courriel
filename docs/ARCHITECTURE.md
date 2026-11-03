@@ -7,7 +7,7 @@ Issue d'un débat entre deux propositions indépendantes (2026-10-31). Elle sert
 |---|---|
 | `app_courriel/__main__.py` | Aiguillage : passage (par défaut), `desabonner`, `menage`, `connecter <compte>` |
 | `app_courriel/db.py` | Ouvre `data/etat.db`, crée le schéma, petites requêtes |
-| `app_courriel/gmail.py` | Client Gmail REST : lire, déplacer (libellé + retrait d'`INBOX`), lire une conversation |
+| `app_courriel/gmail.py` | Client Gmail REST : lire, lister les envoyés (`list_sent`), déplacer (libellé + retrait d'`INBOX`), lire une conversation (`get_thread`) |
 | `app_courriel/graph.py` | Client Graph (`travail`, `perso_ancien`), en-tête `Prefer: IdType="ImmutableId"`, mêmes fonctions que `gmail.py` |
 | `app_courriel/classify.py` | Règles, puis appel à Haiku, JSON strict, repli sur `normal` |
 | `app_courriel/notify.py` | POST ntfy et plage silencieuse 22 h – 7 h |

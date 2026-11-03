@@ -19,6 +19,7 @@ class Sent(list):
 
 def setup(clients, first_run=False):
     conn = db.open_db(":memory:")
+    db.set_state(conn, "last_reminder", NOW.date().isoformat())  # le rappel a son propre fichier de tests
     if not first_run:
         for name in clients:
             db.set_state(conn, f"last_pass:{name}", (NOW - timedelta(minutes=10)).isoformat())

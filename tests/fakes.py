@@ -6,7 +6,11 @@ from datetime import datetime
 class FakeMail:
     """Même interface que gmail.py / graph.py (duck typing). `received_at` : ISO 8601 avec fuseau."""
 
-    def __init__(self, inbox=None, junk=None, fail=False):
+    def __init__(self, inbox=None, junk=None, fail=False, sent=None, threads=None):
+        # sent : [{"id", "thread_id", "to": [adresses], "subject", "sent_at"}]
+        # threads : {thread_id: [{"from_me": bool, "date": ISO 8601}]}
+        self.sent = list(sent or [])
+        self.threads = dict(threads or {})
         self.inbox = list(inbox or [])
         self.junk = list(junk or [])
         self.fail = fail
@@ -16,6 +20,12 @@ class FakeMail:
         if self.fail:
             raise ConnectionError("compte inaccessible")
         return [m for m in self.inbox if datetime.fromisoformat(m["received_at"]) >= since]
+
+    def list_sent(self, since):
+        return [m for m in self.sent if datetime.fromisoformat(m["sent_at"]) >= since]
+
+    def get_thread(self, thread_id):
+        return list(self.threads.get(thread_id, []))
 
     def list_junk(self):
         return list(self.junk)
