@@ -46,11 +46,12 @@ def read_account(conn, name, client, now):
                  m["snippet"][: classify.SNIPPET_CHARS], utc_iso(m["received_at"])),
             )
 
-    junk = {m["id"]: m["sender"] for m in client.list_junk()}
+    junk = set(client.list_junk())
     moved = {r[0]: r[1] for r in conn.execute(
         "SELECT id, sender FROM messages WHERE account = ? AND moved_by_script = 1", (name,))}
-    for message_id, sender in junk.items():
-        if message_id not in moved:  # c'est moi qui l'y ai mis
+    for message_id in junk - moved.keys():  # c'est moi qui l'y ai mis
+        sender = client.get_sender(message_id)
+        if sender:
             block(conn, sender, now)
     for message_id, sender in moved.items():
         if message_id in junk:
@@ -255,9 +256,12 @@ def load_env(path=".env"):
             os.environ.setdefault(key.strip(), value.strip().strip("\"'"))
 
 
-def make_clients():
-    """Les clients Gmail et Graph arrivent dans les PR suivantes."""
-    return {}
+def make_clients(secrets="secrets"):
+    """Les comptes connectés (jeton présent dans secrets/). Graph arrive à l'étape 6."""
+    from app_courriel import gmail
+
+    token = Path(secrets) / "perso_recent.json"
+    return {"perso_recent": gmail.Gmail(token)} if token.exists() else {}
 
 
 def main():

@@ -28,7 +28,10 @@ class FakeMail:
         return list(self.threads.get(thread_id, []))
 
     def list_junk(self):
-        return list(self.junk)
+        return [m["id"] for m in self.junk]
+
+    def get_sender(self, message_id):
+        return next(m["sender"] for m in self.junk if m["id"] == message_id)
 
     def in_inbox(self, message_id):
         return any(m["id"] == message_id for m in self.inbox)
