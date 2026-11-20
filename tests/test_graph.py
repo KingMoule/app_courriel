@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
+from email.utils import parseaddr
 from pathlib import Path
 
 import pytest
 
-from app_courriel import graph, run
+from app_courriel import classify, graph, run
 
 WHEN = "2026-11-04T00:00:00Z"
 ISO = "2026-11-04T00:00:00+00:00"
@@ -59,13 +60,20 @@ def test_list_inbox_pages_sender_and_body():
     })
     got = gr.list_inbox(datetime(2026, 11, 3, 1, tzinfo=timezone(timedelta(hours=-5))))
     assert got == [
-        {"id": "m1", "thread_id": "c1", "sender": "Luc <luc@exemple.test>", "subject": "Allô",
+        {"id": "m1", "thread_id": "c1", "sender": '"Luc" <luc@exemple.test>', "subject": "Allô",
          "snippet": "Bonjour Guillaume, été ?", "received_at": ISO},
         {"id": "m2", "thread_id": "c2", "sender": "pub@pub.test", "subject": "", "snippet": "Aperçu",
          "received_at": ISO},
     ]
     assert http.calls[0][2]["$filter"] == "receivedDateTime ge 2026-11-03T06:00:00Z"
     assert http.calls[1][2] is None  # le lien suivant porte déjà ses paramètres
+
+
+@pytest.mark.parametrize("name", ["Tremblay, Luc", 'Luc "le grand" Tremblay', "Élise Côté"])
+def test_sender_with_comma_or_quotes_parses(name):
+    got = graph.sender_text({"from": sender(name, "Luc@Exemple.test")})
+    assert parseaddr(got) == (name, "Luc@Exemple.test")
+    assert classify.address(got) == "luc@exemple.test"
 
 
 def test_list_sent_and_thread():

@@ -42,7 +42,10 @@ def odata_time(dt):
 def sender_text(message):
     a = (message.get("from") or {}).get("emailAddress", {})
     name, address = a.get("name", ""), a.get("address", "")
-    return f"{name} <{address}>" if name and name != address else address
+    if not name or name == address:
+        return address
+    quoted = name.replace("\\", "\\\\").replace('"', '\\"')  # « Tremblay, Luc » : sans guillemets, parseaddr échoue
+    return f'"{quoted}" <{address}>'
 
 
 class Graph:
