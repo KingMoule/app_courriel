@@ -1,20 +1,33 @@
+import os
 import sys
 from pathlib import Path
 
 from app_courriel import run
 
 COMMANDS = ("desabonner", "menage", "connecter")
+ACCOUNTS = ("perso_recent", "perso_ancien", "travail")
 
 
 def connect(args):
-    if args != ["perso_recent"]:
-        print("Usage : python -m app_courriel connecter perso_recent (travail et perso_ancien : à venir).",
-              file=sys.stderr)
+    if len(args) != 1 or args[0] not in ACCOUNTS:
+        print("Usage : python -m app_courriel connecter perso_recent|perso_ancien|travail", file=sys.stderr)
         return 2
-    from app_courriel import gmail
-
+    name = args[0]
     Path("secrets").mkdir(exist_ok=True)
-    print(f"Jeton rangé dans {gmail.connect('perso_recent')}.")
+    if name == "perso_recent":
+        from app_courriel import gmail
+
+        path = gmail.connect(name)
+    else:
+        from app_courriel import graph
+
+        run.load_env()
+        client_id = os.environ.get("MS_CLIENT_ID")
+        if not client_id:
+            print("MS_CLIENT_ID doit être défini dans .env (inscription de l'app dans Entra).", file=sys.stderr)
+            return 1
+        path = graph.connect(name, client_id)
+    print(f"Jeton rangé dans {path}.")
     return 0
 
 

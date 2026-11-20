@@ -2,3 +2,4 @@ requests
 anthropic
 tzdata
 google-auth-oauthlib
+msal
